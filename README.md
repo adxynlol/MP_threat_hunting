@@ -1,2 +1,2 @@
 # MP_threat_hunting
-network threat hunting and incident reconstruction MAJOR PROJECT
+Our group built a heuristic-based detection engine that analyses network traffic from PCAP captures and flow-level datasets to identify malicious activity such as port scanning, SYN floods, DNS tunneling, and data exfiltration. Each detection is mapped to the MITRE ATT&CK framework with assigned severity levels (Critical, High, Medium, Low).
