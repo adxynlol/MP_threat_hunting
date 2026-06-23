@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Network Anomaly Detection — Benchmark Results</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #080a0d;
+    --bg2: #0f1216;
+    --bg3: #161a20;
+    --border: rgba(255,255,255,0.06);
+    --border2: rgba(255,255,255,0.11);
+    --text: #dde1e7;
+    --text2: #7a8494;
+    --text3: #454e5c;
+    --red: #f25c5c;
+    --orange: #f97316;
+    --yellow: #f5c842;
+    --green: #34d88c;
+    --blue: #3fa8ff;
+    --purple: #9d7dfc;
+    --teal: #26cfc0;
+    --pink: #f06fbc;
+
+    --lr: #3fa8ff;
+    --rf: #34d88c;
+    --xgb: #f97316;
+    --gb: #9d7dfc;
+
+    --ddos-col: #f97316;
+    --unsw-col: #3fa8ff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  /* TOP BAR */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 12px; }
+  .topbar-logo { font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 600; color: var(--text3); letter-spacing: .14em; text-transform: uppercase; }
+  .topbar-title { font-size: 13px; font-weight: 500; color: var(--text); }
+  .topbar-sep { width: 1px; height: 16px; background: var(--border2); }
+  .badge { font-family: 'IBM Plex Mono', monospace; font-size: 10px; padding: 2px 8px; border-radius: 3px; letter-spacing:.06em; }
+  .badge-green { background: rgba(52,216,140,0.1); color: var(--green); border: 1px solid rgba(52,216,140,0.2); }
+  .badge-orange { background: rgba(249,115,22,0.1); color: var(--orange); border: 1px solid rgba(249,115,22,0.2); }
+
+  /* LAYOUT */
+  .main { padding: 24px 28px; display: flex; flex-direction: column; gap: 24px; max-width: 1440px; margin: 0 auto; }
+
+  .divider { display: flex; align-items: center; gap: 12px; padding: 4px 0; }
+  .divider-line { flex: 1; height: 1px; background: var(--border); }
+  .divider-label { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--text3); letter-spacing: .10em; text-transform: uppercase; white-space: nowrap; }
+  .divider-label.hi { color: var(--green); }
+
+  /* CARDS */
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; }
+  .card-title { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--text3); letter-spacing:.09em; text-transform: uppercase; margin-bottom: 14px; }
+
+  /* GRIDS */
+  .g4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .full { grid-column: 1/-1; }
+
+  /* METRIC TILES */
+  .metric { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; }
+  .metric-label { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--text3); letter-spacing:.08em; text-transform: uppercase; margin-bottom: 6px; }
+  .metric-value { font-size: 26px; font-weight: 300; color: var(--text); }
+  .metric-sub { font-size: 11px; color: var(--text3); margin-top: 3px; }
+
+  /* WINNER TABLE */
+  .bench-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .bench-table th { font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing:.09em; text-transform: uppercase; color: var(--text3); text-align: left; padding: 0 10px 8px 0; border-bottom: 1px solid var(--border); }
+  .bench-table th:not(:first-child):not(:nth-child(2)) { text-align: right; }
+  .bench-table td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--border); color: var(--text2); vertical-align: middle; }
+  .bench-table td:not(:first-child):not(:nth-child(2)) { text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
+  .bench-table tr:last-child td { border-bottom: none; }
+  .bench-table tr.best td { color: var(--text); }
+
+  .model-pill { display: inline-block; padding: 2px 8px; border-radius: 3px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; }
+  .ds-pill { display: inline-block; padding: 1px 7px; border-radius: 3px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; }
+
+  /* RANK BAR */
+  .rank-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .rank-label { width: 130px; flex-shrink:0; font-size:11px; color:var(--text2); font-family:'IBM Plex Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rank-track { flex:1; background:var(--bg3); border-radius:2px; height:8px; overflow:hidden; }
+  .rank-fill { height:8px; border-radius:2px; }
+  .rank-val { width:56px; text-align:right; flex-shrink:0; color:var(--text3); font-size:10px; font-family:'IBM Plex Mono',monospace; }
+
+  /* INSIGHT CALLOUTS */
+  .insight { display:flex; gap:10px; padding:10px 14px; border-radius:6px; background:var(--bg3); border-left:3px solid; margin-bottom:8px; }
+  .insight-icon { font-size:14px; flex-shrink:0; margin-top:1px; }
+  .insight-body { font-size:12px; color:var(--text2); line-height:1.6; }
+  .insight-body strong { color:var(--text); font-weight:500; }
+
+  .chart-wrap { position:relative; width:100%; }
+  .legend { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:10px; font-size:11px; color:var(--text2); }
+  .leg-dot { width:8px; height:8px; border-radius:2px; display:inline-block; margin-right:5px; flex-shrink:0; }
+
+  /* FEATURE IMPORTANCE */
+  .feat-cols { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .feat-label { font-size:10px; font-family:'IBM Plex Mono',monospace; letter-spacing:.07em; text-transform:uppercase; color:var(--text3); margin-bottom:10px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-logo">Benchmark</span>
+    <div class="topbar-sep"></div>
+    <span class="topbar-title">Network Anomaly Detection — Model Performance Report</span>
+    <span class="badge badge-green">4 MODELS</span>
+    <span class="badge badge-orange">2 DATASETS</span>
+  </div>
+  <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text3);letter-spacing:.06em">
+    253,437 flows &nbsp;·&nbsp; scikit-learn + XGBoost &nbsp;·&nbsp; 80/20 stratified split
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- HEADLINE METRICS -->
+  <div class="divider">
+    <div class="divider-line"></div><div class="divider-label hi">headline results</div><div class="divider-line"></div>
+  </div>
+
+  <div class="g4">
+    <div class="metric">
+      <div class="metric-label">Best on UNSW-NB15</div>
+      <div class="metric-value" style="color:var(--xgb);font-size:20px;padding-top:4px">XGBoost</div>
+      <div class="metric-sub">F1 0.9139 · AUC 0.9807</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Best on DDoS</div>
+      <div class="metric-value" style="color:var(--lr);font-size:20px;padding-top:4px">All tie</div>
+      <div class="metric-sub">F1 1.0000 · AUC 1.0000</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Fastest training</div>
+      <div class="metric-value" style="color:var(--green);font-size:20px;padding-top:4px">XGBoost</div>
+      <div class="metric-sub">0.70s DDoS · 2.10s UNSW</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Slowest model</div>
+      <div class="metric-value" style="color:var(--text3);font-size:20px;padding-top:4px">Grad. Boost</div>
+      <div class="metric-sub">69.0s UNSW · worst F1 tradeoff</div>
+    </div>
+  </div>
+
+  <!-- FULL RESULTS TABLE -->
+  <div class="divider">
+    <div class="divider-line"></div><div class="divider-label">full results table</div><div class="divider-line"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">All models × all datasets — ranked by F1</div>
+    <table class="bench-table" id="bench-table"></table>
+  </div>
+
+  <!-- F1 + AUC COMPARISON CHARTS -->
+  <div class="divider">
+    <div class="divider-line"></div><div class="divider-label">f1 & auc comparison</div><div class="divider-line"></div>
+  </div>
+
+  <div class="g2">
+    <div class="card">
+      <div class="card-title">F1 score — all models on UNSW-NB15</div>
+      <div class="legend">
+        <span style="display:flex;align-items:center"><span class="leg-dot" style="background:var(--lr)"></span>Logistic Reg</span>
+        <span style="display:flex;align-items:center"><span class="leg-dot" style="background:var(--rf)"></span>Random Forest</span>
+        <span style="display:flex;align-items:center"><span class="leg-dot" style="background:var(--xgb)"></span>XGBoost</span>
+        <span style="display:flex;align-items:center"><span class="leg-dot" style="background:var(--gb)"></span>Grad. Boosting</span>
+      </div>
+      <div class="chart-wrap" style="height:200px"><canvas id="f1-unsw"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">AUC-ROC — all models on UNSW-NB15</div>
+      <div class="legend">
+        <span style="display:flex;align-items:center"><span class="leg-dot" style="background:var(--lr)"></span>Logistic Reg</span>
+        <span style="display:flex;align-items:center"><span class="leg-dot" style="background:var(--rf)"></span>Random Forest</span>
+        <span style="display:flex;align-items:center"><span class="leg-dot" style="background:var(--xgb)"></span>XGBoost</span>
+        <span style="display:flex;align-items:center"><span class="leg-dot" style="background:var(--gb)"></span>Grad. Boosting</span>
+      </div>
+      <div class="chart-wrap" style="height:200px"><canvas id="auc-unsw"></canvas></div>
+    </div>
+  </div>
+
+  <div class="g2">
+    <div class="card">
+      <div class="card-title">Precision vs Recall — UNSW-NB15 (attack class)</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="pr-unsw"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Training time vs F1 — UNSW-NB15 (efficiency frontier)</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="time-f1"></canvas></div>
+    </div>
+  </div>
+
+  <!-- DDOS SECTION -->
+  <div class="divider">
+    <div class="divider-line"></div><div class="divider-label">ddos dataset — why all models score 1.0</div><div class="divider-line"></div>
+  </div>
+
+  <div class="g3">
+    <div class="card" style="grid-column:1/3">
+      <div class="card-title">DDoS insight — near-perfect scores explained</div>
+      <div class="insight" style="border-color:var(--orange)">
+        <span class="insight-icon">⚠</span>
+        <div class="insight-body"><strong>Extremely imbalanced dataset:</strong> 94,970 attack flows vs only 9 normal flows. Any model that predicts "attack" for everything achieves near-perfect recall. The F1=1.0 scores reflect this class imbalance, not necessarily model strength.</div>
+      </div>
+      <div class="insight" style="border-color:var(--green)">
+        <span class="insight-icon">✓</span>
+        <div class="insight-body"><strong>Uniform packet signature:</strong> DDoS flows have zero variance in packet size (228.9–229.0 bytes) and purely unidirectional traffic. These features are trivially separable — even Logistic Regression achieves perfect separation.</div>
+      </div>
+      <div class="insight" style="border-color:var(--blue)">
+        <span class="insight-icon">→</span>
+        <div class="insight-body"><strong>Recommendation:</strong> Validate DDoS models on a balanced holdout set or under-sample the attack class (e.g. 50/50) to get meaningful benchmark scores. The UNSW-NB15 results (49.5% attack rate) are the more realistic performance signal.</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">DDoS class distribution</div>
+      <div class="chart-wrap" style="height:180px"><canvas id="ddos-dist"></canvas></div>
+      <div style="margin-top:10px;font-size:11px;color:var(--text3);line-height:1.7">
+        <div style="display:flex;justify-content:space-between"><span>Attack flows</span><span style="font-family:'IBM Plex Mono',monospace;color:var(--orange)">94,970</span></div>
+        <div style="display:flex;justify-content:space-between"><span>Normal flows</span><span style="font-family:'IBM Plex Mono',monospace;color:var(--green)">9</span></div>
+        <div style="display:flex;justify-content:space-between"><span>Attack rate</span><span style="font-family:'IBM Plex Mono',monospace;color:var(--red)">99.99%</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FEATURE IMPORTANCE -->
+  <div class="divider">
+    <div class="divider-line"></div><div class="divider-label">random forest feature importance</div><div class="divider-line"></div>
+  </div>
+
+  <div class="g2">
+    <div class="card">
+      <div class="card-title">Top 10 features — DDoS dataset</div>
+      <div id="ddos-feat"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Top 10 features — UNSW-NB15 dataset</div>
+      <div id="unsw-feat"></div>
+    </div>
+  </div>
+
+  <!-- NEXT STEPS -->
+  <div class="divider">
+    <div class="divider-line"></div><div class="divider-label">recommended next steps</div><div class="divider-line"></div>
+  </div>
+
+  <div class="g3">
+    <div class="card">
+      <div class="card-title">1 · Tune the best model</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.8">
+        <div>XGBoost leads on UNSW-NB15 with the best F1/AUC balance and trains in 2s. Use <code style="font-family:'IBM Plex Mono';font-size:11px;color:var(--blue)">GridSearchCV</code> or <code style="font-family:'IBM Plex Mono';font-size:11px;color:var(--blue)">Optuna</code> to tune:</div>
+        <div style="margin-top:8px;padding-left:10px;border-left:2px solid var(--border2)">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--teal)">n_estimators: 100–500</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--teal)">max_depth: 4–10</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--teal)">learning_rate: 0.01–0.3</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--teal)">subsample: 0.6–1.0</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">2 · Fix DDoS imbalance</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.8">
+        The 99.99% attack rate inflates all DDoS scores. Fix before trusting those numbers:
+        <div style="margin-top:8px;padding-left:10px;border-left:2px solid var(--border2)">
+          <div>• <strong style="color:var(--text)">SMOTE</strong> — synthesize normal samples</div>
+          <div>• <strong style="color:var(--text)">RandomUnderSampler</strong> — downsample attack class to 50/50</div>
+          <div>• <strong style="color:var(--text)">class_weight='balanced'</strong> — quick fix for LR/RF</div>
+          <div>• <strong style="color:var(--text)">scale_pos_weight</strong> — XGBoost equivalent</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">3 · Cross-dataset generalisation</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.8">
+        The two datasets have different feature spaces. For a unified model:
+        <div style="margin-top:8px;padding-left:10px;border-left:2px solid var(--border2)">
+          <div>• Map to a <strong style="color:var(--text)">shared feature set</strong> (flow rate, packet size, duration, bytes)</div>
+          <div>• Use <strong style="color:var(--text)">domain adaptation</strong> or transfer learning</div>
+          <div>• Train on UNSW, test on DDoS to measure out-of-distribution robustness</div>
+          <div>• Add a <strong style="color:var(--text)">multi-label output</strong>: binary + attack category</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<script>
+const tc = 'rgba(255,255,255,0.35)';
+const gc = 'rgba(255,255,255,0.05)';
+
+// === DATA ===
+const results = [
+  {model:'Logistic Regression', dataset:'DDoS',      acc:1.0000, prec:1.0000, rec:1.0000, f1:1.0000, auc:1.0000, train:0.59,  infer:1.7},
+  {model:'Logistic Regression', dataset:'UNSW-NB15', acc:0.8090, prec:0.7396, rec:0.9482, f1:0.8310, auc:0.8885, train:1.91,  infer:2.2},
+  {model:'Random Forest',       dataset:'DDoS',      acc:0.9999, prec:0.9999, rec:1.0000, f1:1.0000, auc:1.0000, train:1.12,  infer:25.2},
+  {model:'Random Forest',       dataset:'UNSW-NB15', acc:0.9140, prec:0.9131, rec:0.9132, f1:0.9132, auc:0.9785, train:32.92, infer:518.2},
+  {model:'XGBoost',             dataset:'DDoS',      acc:1.0000, prec:1.0000, rec:1.0000, f1:1.0000, auc:1.0000, train:0.70,  infer:14.6},
+  {model:'XGBoost',             dataset:'UNSW-NB15', acc:0.9148, prec:0.9150, rec:0.9129, f1:0.9139, auc:0.9807, train:2.10,  infer:56.8},
+  {model:'Gradient Boosting',   dataset:'DDoS',      acc:1.0000, prec:1.0000, rec:1.0000, f1:1.0000, auc:1.0000, train:5.47,  infer:13.7},
+  {model:'Gradient Boosting',   dataset:'UNSW-NB15', acc:0.8938, prec:0.8637, rec:0.9327, f1:0.8969, auc:0.9711, train:69.02, infer:54.3},
+];
+
+const ddosFeat = {'Packet Length Mean':0.1200,'Max Packet Length':0.1100,'Fwd Pkt Len Min':0.1023,'Fwd Pkt Len Max':0.1001,'Avg Fwd Seg Size':0.0800,'Fwd Pkt Len Mean':0.0701,'Avg Packet Size':0.0701,'Min Packet Length':0.0700,'Subflow Fwd Bytes':0.0501,'Total Fwd Len':0.0500};
+const unswFeat = {'ackdat':0.1006,'synack':0.0943,'tcprtt':0.0760,'dload':0.0709,'rate':0.0563,'dbytes':0.0530,'dmean':0.0521,'dinpkt':0.0508,'sbytes':0.0474,'smean':0.0440};
+
+const MODEL_COLORS = {
+  'Logistic Regression': getComputedStyle(document.documentElement).getPropertyValue('--lr').trim() || '#3fa8ff',
+  'Random Forest':       getComputedStyle(document.documentElement).getPropertyValue('--rf').trim() || '#34d88c',
+  'XGBoost':             getComputedStyle(document.documentElement).getPropertyValue('--xgb').trim() || '#f97316',
+  'Gradient Boosting':   getComputedStyle(document.documentElement).getPropertyValue('--gb').trim() || '#9d7dfc',
+};
+
+// === RESULTS TABLE ===
+const unsw = results.filter(r=>r.dataset==='UNSW-NB15').sort((a,b)=>b.f1-a.f1);
+const tbl = document.getElementById('bench-table');
+tbl.innerHTML = `<tr>
+  <th>Model</th><th>Dataset</th>
+  <th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1 ↓</th><th>AUC-ROC</th><th>Train (s)</th><th>Infer (ms)</th>
+</tr>`;
+const sorted = [...results].sort((a,b)=>b.f1-a.f1);
+sorted.forEach((r,i) => {
+  const col = MODEL_COLORS[r.model] || '#888';
+  const dsColor = r.dataset==='DDoS' ? '#f97316' : '#3fa8ff';
+  const best = i===0;
+  tbl.innerHTML += `<tr class="${best?'best':''}">
+    <td><span class="model-pill" style="background:${col}18;color:${col};border:1px solid ${col}30">${r.model}</span></td>
+    <td><span class="ds-pill" style="background:${dsColor}10;color:${dsColor};border:1px solid ${dsColor}25">${r.dataset}</span></td>
+    <td>${r.acc.toFixed(4)}</td>
+    <td>${r.prec.toFixed(4)}</td>
+    <td>${r.rec.toFixed(4)}</td>
+    <td style="color:${best?'#34d88c':''};font-weight:${best?'600':'400'}">${r.f1.toFixed(4)}</td>
+    <td>${r.auc.toFixed(4)}</td>
+    <td>${r.train.toFixed(2)}</td>
+    <td>${r.infer.toFixed(1)}</td>
+  </tr>`;
+});
+
+// === F1 CHART (UNSW) ===
+const unswModels = unsw.map(r=>r.model);
+const unswF1 = unsw.map(r=>r.f1);
+const unswColors = unswModels.map(m=>MODEL_COLORS[m]);
+new Chart(document.getElementById('f1-unsw'), {
+  type:'bar',
+  data:{labels:unswModels,datasets:[{data:unswF1,backgroundColor:unswColors.map(c=>c+'99'),borderColor:unswColors,borderWidth:1,borderRadius:3}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` F1: ${ctx.raw.toFixed(4)}`}}},scales:{x:{ticks:{color:tc,font:{size:10}},grid:{color:gc}},y:{min:0.75,max:1.0,ticks:{color:tc,font:{size:9}},grid:{color:gc},title:{display:true,text:'F1 Score',color:tc,font:{size:9}}}}}
+});
+
+// === AUC CHART (UNSW) ===
+new Chart(document.getElementById('auc-unsw'), {
+  type:'bar',
+  data:{labels:unswModels,datasets:[{data:unsw.map(r=>r.auc),backgroundColor:unswColors.map(c=>c+'99'),borderColor:unswColors,borderWidth:1,borderRadius:3}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` AUC: ${ctx.raw.toFixed(4)}`}}},scales:{x:{ticks:{color:tc,font:{size:10}},grid:{color:gc}},y:{min:0.85,max:1.0,ticks:{color:tc,font:{size:9}},grid:{color:gc},title:{display:true,text:'AUC-ROC',color:tc,font:{size:9}}}}}
+});
+
+// === PRECISION vs RECALL (UNSW) ===
+const prData = unsw.map((r,i) => ({x:r.prec, y:r.rec, label:r.model, color:unswColors[i]}));
+new Chart(document.getElementById('pr-unsw'), {
+  type:'scatter',
+  data:{datasets:prData.map(d=>({
+    label:d.label,
+    data:[{x:d.x,y:d.y}],
+    backgroundColor:d.color+'bb',
+    borderColor:d.color,
+    pointRadius:8,
+    pointHoverRadius:10,
+  }))},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: P=${ctx.parsed.x.toFixed(4)} R=${ctx.parsed.y.toFixed(4)}`}}},scales:{
+    x:{min:0.70,max:0.96,ticks:{color:tc,font:{size:9}},grid:{color:gc},title:{display:true,text:'Precision',color:tc,font:{size:9}}},
+    y:{min:0.92,max:0.96,ticks:{color:tc,font:{size:9}},grid:{color:gc},title:{display:true,text:'Recall',color:tc,font:{size:9}}}
+  }}
+});
+
+// === TIME vs F1 SCATTER ===
+new Chart(document.getElementById('time-f1'), {
+  type:'scatter',
+  data:{datasets:unsw.map((r,i)=>({
+    label:r.model,
+    data:[{x:r.train, y:r.f1}],
+    backgroundColor:unswColors[i]+'bb',
+    borderColor:unswColors[i],
+    pointRadius:8,
+    pointHoverRadius:10,
+  }))},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.x.toFixed(1)}s → F1=${ctx.parsed.y.toFixed(4)}`}}},scales:{
+    x:{ticks:{color:tc,font:{size:9}},grid:{color:gc},title:{display:true,text:'Train time (s) — lower is better →',color:tc,font:{size:9}}},
+    y:{min:0.80,max:0.93,ticks:{color:tc,font:{size:9}},grid:{color:gc},title:{display:true,text:'F1 Score',color:tc,font:{size:9}}}
+  }}
+});
+
+// === DDOS DIST DONUT ===
+new Chart(document.getElementById('ddos-dist'), {
+  type:'doughnut',
+  data:{labels:['Attack (94,970)','Normal (9)'],datasets:[{data:[94970,9],backgroundColor:['rgba(249,115,22,0.85)','rgba(52,216,140,0.85)'],borderWidth:2,borderColor:'#0f1216'}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.label}`}}},cutout:'68%'}
+});
+
+// === FEATURE IMPORTANCE BARS ===
+function featBars(containerId, data, color) {
+  const el = document.getElementById(containerId);
+  const max = Math.max(...Object.values(data));
+  Object.entries(data).forEach(([k,v]) => {
+    const pct = (v/max*100).toFixed(1);
+    el.innerHTML += `<div class="rank-bar">
+      <div class="rank-label" title="${k}">${k}</div>
+      <div class="rank-track"><div class="rank-fill" style="width:${pct}%;background:${color}"></div></div>
+      <div class="rank-val">${(v*100).toFixed(1)}%</div>
+    </div>`;
+  });
+}
+featBars('ddos-feat', ddosFeat, '#f97316');
+featBars('unsw-feat', unswFeat, '#3fa8ff');
+</script>
+</body>
+</html>
