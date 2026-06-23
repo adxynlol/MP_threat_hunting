@@ -1,0 +1,34 @@
+{
+  "model": "Heuristic Threshold (Rule-Based)",
+  "dataset": "UNSW-NB15",
+  "total_rows": 64942,
+  "overall_accuracy": 0.5361,
+  "f1_weighted": 0.5927,
+  "per_flow_rules": {
+    "recon": [
+      "Port_Scan_Probe",
+      "Stealth_Scan_SubSecond",
+      "DNS_Recon_Probe",
+      "SYN_Scan_NoResponse"
+    ],
+    "dos": [
+      "SYN_Flood",
+      "UDP_ICMP_Flood",
+      "High_Volume_Flood",
+      "High_Rate_Sustained_Flood",
+      "Large_Burst_Short"
+    ]
+  },
+  "cross_flow_rules": [
+    "Port_Scan_Campaign",
+    "IP_Sweep",
+    "DDoS_Volume_Campaign",
+    "SYN_Flood_Campaign"
+  ],
+  "thresholds": {
+    "port_scan_min_ports": 10,
+    "ip_sweep_min_hosts": 8,
+    "ddos_min_total_bytes": 100000000,
+    "syn_flood_min_flows": 15
+  }
+}
