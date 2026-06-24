@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Threat Hunting Dashboard — DDoS Dataset</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg: #0d0f1a;
+    --surface: #131629;
+    --surface2: #1b1f35;
+    --border: #1e2540;
+    --accent: #f97316;      /* orange — DDoS energy */
+    --accent2: #ef4444;     /* red */
+    --accent3: #facc15;     /* amber */
+    --accent4: #8b5cf6;     /* violet */
+    --teal: #14b8a6;
+    --text: #e2e8f0;
+    --muted: #64748b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .shield {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .header-title h1 { font-size: 18px; font-weight: 700; color: var(--text); }
+  .header-title p {
+    font-size: 12px; color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace; margin-top: 2px;
+  }
+  .badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+  }
+
+  /* ── ALERT BANNER ── */
+  .alert-banner {
+    background: linear-gradient(90deg, rgba(239,68,68,0.12) 0%, rgba(249,115,22,0.08) 100%);
+    border-bottom: 1px solid rgba(239,68,68,0.3);
+    padding: 10px 32px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+  }
+  .alert-dot {
+    width: 8px; height: 8px;
+    background: var(--accent2);
+    border-radius: 50%;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.4); }
+  }
+  .alert-text { color: var(--accent2); font-weight: 600; }
+  .alert-sub { color: var(--muted); }
+
+  /* ── LAYOUT ── */
+  .dashboard { padding: 24px 32px; max-width: 1600px; margin: 0 auto; }
+
+  /* ── KPI ROW ── */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 2px;
+  }
+  .k1::before { background: var(--accent); }
+  .k2::before { background: var(--accent2); }
+  .k3::before { background: var(--accent3); }
+  .k4::before { background: var(--teal); }
+  .k5::before { background: var(--accent4); }
+  .kpi-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--muted); margin-bottom: 8px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .kpi-value {
+    font-size: 28px; font-weight: 700;
+    font-family: 'IBM Plex Mono', monospace; line-height: 1;
+  }
+  .k1 .kpi-value { color: var(--accent); }
+  .k2 .kpi-value { color: var(--accent2); }
+  .k3 .kpi-value { color: var(--accent3); }
+  .k4 .kpi-value { color: var(--teal); }
+  .k5 .kpi-value { color: var(--accent4); }
+  .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+  /* ── CHART GRID ── */
+  .chart-grid { display: grid; gap: 18px; }
+  .row-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .row-2 { grid-template-columns: 1.4fr 1fr; }
+  .row-2b { grid-template-columns: 1fr 1fr; }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+  }
+  .chart-title {
+    font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+    margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .chart-title span.dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: inline-block;
+  }
+
+  /* ── MITRE INFO CARD ── */
+  .mitre-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .mitre-block {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .mitre-block-label {
+    font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+    margin-bottom: 8px;
+  }
+  .mitre-block-value {
+    font-size: 15px; font-weight: 600;
+    color: var(--accent);
+  }
+  .mitre-tid {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--accent3);
+    background: rgba(250,204,21,0.1);
+    padding: 3px 8px;
+    border-radius: 3px;
+    margin-top: 6px;
+  }
+
+  /* ── STAT PILL LIST ── */
+  .stat-pill-list { display: flex; flex-direction: column; gap: 10px; }
+  .stat-pill {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+  }
+  .stat-pill-name { font-size: 12px; color: var(--muted); }
+  .stat-pill-val {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px; font-weight: 600;
+    color: var(--text);
+  }
+
+  /* ── PROTO BARS ── */
+  .proto-bar-list { display: flex; flex-direction: column; gap: 10px; }
+  .proto-item { display: flex; flex-direction: column; gap: 4px; }
+  .proto-row { display: flex; justify-content: space-between; font-size: 12px; }
+  .proto-name { font-family: 'IBM Plex Mono', monospace; color: var(--text); font-size: 12px; }
+  .proto-count { color: var(--muted); font-size: 12px; }
+  .proto-track { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .proto-fill { height: 100%; border-radius: 3px; }
+
+  footer {
+    text-align: center;
+    padding: 24px;
+    font-size: 12px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    font-family: 'IBM Plex Mono', monospace;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="shield">⚡</div>
+    <div class="header-title">
+      <h1>Threat Hunting Dashboard</h1>
+      <p>Dataset: DDoS &nbsp;|&nbsp; MITRE: T1498 — Network Denial of Service</p>
+    </div>
+  </div>
+  <span class="badge">94,970 EVENTS</span>
+</header>
+
+<div class="alert-banner">
+  <div class="alert-dot"></div>
+  <span class="alert-text">ALL 94,970 EVENTS CONFIRMED DoS</span>
+  <span class="alert-sub">&nbsp;·&nbsp; Severity: HIGH across 100% of flows &nbsp;·&nbsp; MITRE Tactic: Impact &nbsp;·&nbsp; Technique: Network Denial of Service (T1498)</span>
+</div>
+
+<div class="dashboard">
+
+  <!-- KPI ROW -->
+  <div class="kpi-row">
+    <div class="kpi-card k1">
+      <div class="kpi-label">Total Events</div>
+      <div class="kpi-value">94,970</div>
+      <div class="kpi-sub">100% DoS / DDoS</div>
+    </div>
+    <div class="kpi-card k2">
+      <div class="kpi-label">Avg Flow Bytes/s</div>
+      <div class="kpi-value">370M</div>
+      <div class="kpi-sub">Bytes per second per flow</div>
+    </div>
+    <div class="kpi-card k3">
+      <div class="kpi-label">Avg Flow Pkts/s</div>
+      <div class="kpi-value">1.6M</div>
+      <div class="kpi-sub">Packets per second per flow</div>
+    </div>
+    <div class="kpi-card k4">
+      <div class="kpi-label">Avg Packet Size</div>
+      <div class="kpi-value">343B</div>
+      <div class="kpi-sub">Mean payload: 228.9 bytes</div>
+    </div>
+    <div class="kpi-card k5">
+      <div class="kpi-label">Avg Flow Duration</div>
+      <div class="kpi-value">74.5K</div>
+      <div class="kpi-sub">µs · most flows ≤ 1µs</div>
+    </div>
+  </div>
+
+  <!-- ROW 1: Flow Bytes/s dist + Flow Packets/s dist + MITRE info -->
+  <div class="chart-grid row-3" style="margin-bottom:18px;">
+    <div class="chart-card">
+      <div class="chart-title"><span class="dot" style="background:var(--accent)"></span>Flow Bytes/s Distribution</div>
+      <div style="position:relative;height:220px;">
+        <canvas id="bytesChart"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title"><span class="dot" style="background:var(--accent2)"></span>Flow Packets/s Buckets</div>
+      <div style="position:relative;height:220px;">
+        <canvas id="pktsChart"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title"><span class="dot" style="background:var(--accent3)"></span>MITRE ATT&CK Mapping</div>
+      <div class="mitre-info-grid" style="margin-top:4px;">
+        <div class="mitre-block" style="grid-column:1/-1;">
+          <div class="mitre-block-label">Technique</div>
+          <div class="mitre-block-value">Network Denial of Service</div>
+          <span class="mitre-tid">T1498</span>
+        </div>
+        <div class="mitre-block">
+          <div class="mitre-block-label">Tactic</div>
+          <div class="mitre-block-value" style="color:var(--accent2);">Impact</div>
+        </div>
+        <div class="mitre-block">
+          <div class="mitre-block-label">Severity</div>
+          <div class="mitre-block-value" style="color:var(--accent3);">High</div>
+        </div>
+        <div class="mitre-block" style="grid-column:1/-1;">
+          <div class="mitre-block-label">Goal</div>
+          <div class="mitre-block-value" style="font-size:13px;color:var(--text);">Exhaust target resources by flooding the network with high-volume, high-rate traffic to deny service to legitimate users.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW 2: Header Length + Source Port + Subflow Bytes -->
+  <div class="chart-grid row-3" style="margin-bottom:18px;">
+    <div class="chart-card">
+      <div class="chart-title"><span class="dot" style="background:var(--accent4)"></span>Fwd Header Length Distribution</div>
+      <div style="position:relative;height:220px;">
+        <canvas id="headerChart"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title"><span class="dot" style="background:var(--teal)"></span>Source Port Ranges</div>
+      <div class="proto-bar-list" id="sportList" style="margin-top:8px;"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title"><span class="dot" style="background:var(--accent3)"></span>Subflow Fwd Bytes (Top Values)</div>
+      <div style="position:relative;height:220px;">
+        <canvas id="subflowChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW 3: Packet stats + Flow summary stats -->
+  <div class="chart-grid row-2b">
+    <div class="chart-card">
+      <div class="chart-title"><span class="dot" style="background:var(--teal)"></span>Packet Length Profile</div>
+      <div style="position:relative;height:200px;">
+        <canvas id="pktLenChart"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title"><span class="dot" style="background:var(--accent)"></span>Flow Characteristic Summary</div>
+      <div class="stat-pill-list" style="margin-top:8px;" id="statPills"></div>
+    </div>
+  </div>
+
+</div>
+
+<footer>DDoS Threat Hunting Results · MITRE T1498: Network Denial of Service · All 94,970 flows confirmed malicious · Generated by Claude</footer>
+
+<script>
+const DATA = {
+  total: 94970,
+  bytes_dist: {"0-100M":16715,"100-200M":105,"200-300M":3598,"300-400M":254,"400-500M":73116,"500-600M":988,"600M+":192},
+  header_dist: {"16":55436,"0":19570,"40":18072,"28":1014,"64":682,"14":157},
+  sport_dist: {"0-500":2,"501-1000":91042,"1001-2000":3923,"2001-5000":0,"5001+":2},
+  pkt_dist: {"<50K":16530,"50K-100K":64,"100K-250K":21,"250K-500K":114,"500K-1M":3682,"at 2M cap":74559,"2M+":0},
+  subflow: {"458":76956,"422":9017,"494":5985,"424":932,"530":911,"566":367,"386":191,"916":129}
+};
+
+Chart.defaults.color = '#64748b';
+Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
+
+const PALETTE = ['#f97316','#ef4444','#facc15','#14b8a6','#8b5cf6','#ec4899','#06b6d4','#10b981'];
+
+/* ── Flow Bytes/s ── */
+new Chart(document.getElementById('bytesChart'), {
+  type: 'bar',
+  data: {
+    labels: Object.keys(DATA.bytes_dist),
+    datasets: [{
+      data: Object.values(DATA.bytes_dist),
+      backgroundColor: ['#f97316','#ef4444','#facc15','#14b8a6','#f97316cc','#8b5cf6','#06b6d4'],
+      borderRadius: 4,
+      barThickness: 28
+    }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+      y: {
+        grid: { color: 'rgba(255,255,255,0.04)' },
+        ticks: { color: '#94a3b8', callback: v => v >= 1000 ? (v/1000).toFixed(0)+'K' : v }
+      }
+    }
+  }
+});
+
+/* ── Packets/s ── */
+new Chart(document.getElementById('pktsChart'), {
+  type: 'doughnut',
+  data: {
+    labels: Object.keys(DATA.pkt_dist).filter(k => DATA.pkt_dist[k] > 0),
+    datasets: [{
+      data: Object.values(DATA.pkt_dist).filter(v => v > 0),
+      backgroundColor: ['#f97316','#14b8a6','#facc15','#8b5cf6','#ef4444','#06b6d4'],
+      borderWidth: 0, hoverOffset: 6
+    }]
+  },
+  options: {
+    cutout: '60%',
+    plugins: {
+      legend: {
+        position: 'right',
+        labels: { boxWidth: 10, padding: 8, font: { size: 10 }, color: '#94a3b8' }
+      },
+      tooltip: {
+        callbacks: {
+          label: ctx => ` ${ctx.label}: ${ctx.parsed.toLocaleString()} (${(ctx.parsed/DATA.total*100).toFixed(1)}%)`
+        }
+      }
+    }
+  }
+});
+
+/* ── Header Length ── */
+new Chart(document.getElementById('headerChart'), {
+  type: 'bar',
+  data: {
+    labels: Object.keys(DATA.header_dist).map(k => k+' bytes'),
+    datasets: [{
+      data: Object.values(DATA.header_dist),
+      backgroundColor: 'rgba(139,92,246,0.25)',
+      borderColor: '#8b5cf6',
+      borderWidth: 1,
+      borderRadius: 4,
+      barThickness: 36
+    }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 11 } } },
+      y: {
+        grid: { color: 'rgba(255,255,255,0.04)' },
+        ticks: { color: '#94a3b8', callback: v => v >= 1000 ? (v/1000).toFixed(0)+'K' : v }
+      }
+    }
+  }
+});
+
+/* ── Source Port Ranges ── */
+const sportColors = ['#14b8a6','#f97316','#facc15','#8b5cf6','#ef4444'];
+const sportMax = Math.max(...Object.values(DATA.sport_dist));
+const sl = document.getElementById('sportList');
+Object.entries(DATA.sport_dist).forEach(([range, count], i) => {
+  const pct = (count/DATA.total*100).toFixed(1);
+  sl.innerHTML += `
+    <div class="proto-item">
+      <div class="proto-row">
+        <span class="proto-name">Port ${range}</span>
+        <span class="proto-count">${count.toLocaleString()} <span style="color:${sportColors[i]}">(${pct}%)</span></span>
+      </div>
+      <div class="proto-track">
+        <div class="proto-fill" style="width:${sportMax > 0 ? count/sportMax*100 : 0}%;background:${sportColors[i]};"></div>
+      </div>
+    </div>`;
+});
+
+/* ── Subflow Fwd Bytes ── */
+new Chart(document.getElementById('subflowChart'), {
+  type: 'bar',
+  data: {
+    labels: Object.keys(DATA.subflow).map(k => k+' B'),
+    datasets: [{
+      data: Object.values(DATA.subflow),
+      backgroundColor: PALETTE,
+      borderRadius: 4,
+      barThickness: 26
+    }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+      y: {
+        grid: { color: 'rgba(255,255,255,0.04)' },
+        ticks: { color: '#94a3b8', callback: v => v >= 1000 ? (v/1000).toFixed(0)+'K' : v }
+      }
+    }
+  }
+});
+
+/* ── Packet Length Profile (Radar-like bar) ── */
+new Chart(document.getElementById('pktLenChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Min Pkt Length', 'Pkt Length Mean', 'Max Pkt Length', 'Avg Pkt Size'],
+    datasets: [{
+      label: 'Bytes',
+      data: [228.94, 228.95, 228.96, 343.28],
+      backgroundColor: ['#14b8a6','#f97316','#ef4444','#8b5cf6'],
+      borderRadius: 5,
+      barThickness: 44
+    }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 11 } } },
+      y: {
+        min: 0, max: 400,
+        grid: { color: 'rgba(255,255,255,0.04)' },
+        ticks: { color: '#94a3b8', callback: v => v+' B' }
+      }
+    }
+  }
+});
+
+/* ── Stat Pills ── */
+const stats = [
+  { label: 'Attack Category', val: 'DoS (100%)' },
+  { label: 'MITRE Technique ID', val: 'T1498' },
+  { label: 'Avg Fwd Packets / Flow', val: '2.01 pkts' },
+  { label: 'Flows at 2M pkt/s cap', val: '74,559 (78.5%)' },
+  { label: 'Dominant Source Port', val: '501–1000 (95.9%)' },
+  { label: 'Most Common Subflow Bytes', val: '458 B (81.0%)' },
+  { label: 'FTP Login Events', val: '0 (DDoS only)' },
+  { label: 'Data Source', val: 'CIC-DDoS Dataset' },
+];
+const sp = document.getElementById('statPills');
+stats.forEach(s => {
+  sp.innerHTML += `<div class="stat-pill">
+    <span class="stat-pill-name">${s.label}</span>
+    <span class="stat-pill-val">${s.val}</span>
+  </div>`;
+});
+</script>
+</body>
+</html>
