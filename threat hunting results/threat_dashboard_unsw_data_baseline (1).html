@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Threat Hunting Dashboard — UNSW-NB15 Heuristics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg:       #0a0e17;
+    --surface:  #111827;
+    --surface2: #1a2235;
+    --border:   #1f2d45;
+    --accent:   #00e5ff;    /* Cyan — UNSW energy */
+    --accent2:  #7c3aed;    /* Purple */
+    --amber:    #ffc107;    /* Warning */
+    --red:      #ff4560;    /* Critical */
+    --teal:     #10b981;    /* Success/Normal */
+    --muted:    #64748b;
+    --text:     #e2e8f0;
+    --text-dim: #94a3b8;
+    --mono:     'IBM Plex Mono', monospace;
+    --sans:     'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .threat-badge {
+    background: rgba(0, 229, 255, 0.15);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    padding: 3px 8px;
+    border-radius: 2px;
+    text-transform: uppercase;
+  }
+  .header-title {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 0.5px;
+  }
+  .header-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 1px;
+  }
+  .header-meta {
+    display: flex;
+    gap: 24px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .header-meta span strong {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* ── Layout ── */
+  main { padding: 28px 32px; max-width: 1400px; margin: 0 auto; }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    margin-top: 32px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── Stat Cards ── */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 16px 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--border);
+  }
+  .stat-card.cyan::before { background: var(--accent); }
+  .stat-card.purple::before { background: var(--accent2); }
+  .stat-card.amber::before { background: var(--amber); }
+  .stat-card.red::before { background: var(--red); }
+  
+  .stat-value {
+    font-family: var(--mono);
+    font-size: 24px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.1;
+    margin-bottom: 4px;
+  }
+  .stat-value.cyan { color: var(--accent); }
+  .stat-value.purple { color: var(--accent2); }
+  .stat-value.amber { color: var(--amber); }
+  .stat-value.red { color: var(--red); }
+  
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.3;
+  }
+  .stat-sub {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent);
+    margin-top: 6px;
+  }
+
+  /* ── Alert Banner ── */
+  .alert-banner {
+    background: linear-gradient(135deg, rgba(0, 229, 255, 0.08), rgba(124, 58, 237, 0.04));
+    border: 1px solid rgba(0, 229, 255, 0.3);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 14px 20px;
+    margin-bottom: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .alert-icon {
+    font-size: 20px;
+    margin-top: 1px;
+    flex-shrink: 0;
+  }
+  .alert-title {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .alert-text {
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .alert-text code {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    background: rgba(0, 229, 255, 0.1);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  /* ── Chart grid ── */
+  .chart-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .chart-grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .chart-grid-wide {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px;
+  }
+  .chart-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .chart-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    line-height: 1.4;
+  }
+  .chart-desc code {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent);
+    background: rgba(0, 229, 255, 0.1);
+    padding: 1px 4px;
+    border-radius: 2px;
+  }
+  .chart-wrap { position: relative; height: 200px; }
+
+  /* ── Donut chart ── */
+  .donut-wrap {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+  .donut-svg { flex-shrink: 0; }
+  .donut-legend { flex: 1; }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 11px;
+    color: var(--text);
+  }
+  .legend-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .legend-pct {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-left: auto;
+  }
+
+  /* ── Rule cards ── */
+  .rule-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+  .rule-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 18px;
+    border-left: 3px solid var(--accent);
+  }
+  .rule-card.recon { border-left-color: var(--accent); }
+  .rule-card.dos { border-left-color: var(--amber); }
+  .rule-card.exfil { border-left-color: var(--red); }
+  .rule-name {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 8px;
+  }
+  .rule-thresh {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 8px;
+  }
+  .thresh-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-dim);
+    padding: 2px 7px;
+    border-radius: 3px;
+  }
+  .thresh-tag.cyan {
+    background: rgba(0,229,255,0.08);
+    border-color: rgba(0,229,255,0.2);
+    color: var(--accent);
+  }
+  .thresh-tag.amber {
+    background: rgba(255,193,7,0.08);
+    border-color: rgba(255,193,7,0.2);
+    color: var(--amber);
+  }
+  .thresh-tag.red {
+    background: rgba(255,69,96,0.08);
+    border-color: rgba(255,69,96,0.2);
+    color: var(--red);
+  }
+  .rule-mitre {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .rule-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.4;
+    margin-top: 6px;
+  }
+  .rule-desc strong { color: var(--text); }
+
+  /* ── Feature table ── */
+  table.feature-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    font-family: var(--mono);
+  }
+  table.feature-table th {
+    text-align: left;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  table.feature-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid rgba(31,45,69,0.5);
+    color: var(--text);
+  }
+  table.feature-table tr:hover td { background: rgba(255,255,255,0.02); }
+  table.feature-table td.key { color: var(--accent); font-weight: 600; }
+  table.feature-table td.val { color: var(--text); }
+  table.feature-table td.map { color: var(--text-dim); font-size: 10px; font-family: var(--sans); }
+
+  /* ── Footer ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 16px 32px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    margin-top: 32px;
+  }
+
+  /* ── Pulse animation on alert ── */
+  @keyframes pulse-border {
+    0%, 100% { border-color: rgba(0, 229, 255, 0.3); }
+    50% { border-color: rgba(0, 229, 255, 0.7); }
+  }
+  .alert-banner { animation: pulse-border 3s ease infinite; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <span class="threat-badge">BASELINE CALIBRATION</span>
+    <div>
+      <div class="header-title">THREAT HUNTING DASHBOARD — Heuristic Engine Calibration</div>
+      <div class="header-sub">Dataset: UNSW-NB15 · Function: Threshold Profiling & False Positive Reduction</div>
+    </div>
+  </div>
+  <div class="header-meta">
+    <span>Total Flows <strong>63,815</strong></span>
+    <span>Classes <strong>Multi-class (8)</strong></span>
+    <span>FPR Target <strong>&lt;5%</strong></span>
+    <span>Rule Engine <strong>Heuristic v2</strong></span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ALERT BANNER -->
+  <div class="section-label">Engine Assessment</div>
+  <div class="alert-banner" style="margin-bottom:20px;">
+    <div class="alert-icon">⚙️</div>
+    <div>
+      <div class="alert-title">HEURISTIC RULE CALIBRATION — MATHEMATICAL BASELINING</div>
+      <div class="alert-text">
+        Unlike the DDoS dataset, UNSW-NB15 contains highly diverse traffic (Exploits, Recon, DoS, Backdoors). 
+        This dataset was used to <strong>calibrate the mathematical boundaries</strong> for the heuristic rules. 
+        By plotting distributions for packet counts and payload sizes across categories, empirical evidence drove the 
+        creation of boundaries such as <code>smean ≤ 90</code> for active scanning and <code>dpkts == 0</code> for DoS floods.
+      </div>
+    </div>
+  </div>
+
+  <!-- STAT CARDS -->
+  <div class="section-label">Dataset Baseline Metrics</div>
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-value">63,815</div>
+      <div class="stat-label">Total flows analysed</div>
+      <div class="stat-sub">Mixed attack traffic</div>
+    </div>
+    <div class="stat-card cyan">
+      <div class="stat-value cyan">8,012</div>
+      <div class="stat-label">Reconnaissance flows</div>
+      <div class="stat-sub">Baseline for T1595 rules</div>
+    </div>
+    <div class="stat-card amber">
+      <div class="stat-value amber">4,873</div>
+      <div class="stat-label">Network DoS flows</div>
+      <div class="stat-sub">Baseline for T1498 rules</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-value red">1,389</div>
+      <div class="stat-label">Backdoor / Exfil flows</div>
+      <div class="stat-sub">Baseline for T1041 / Tunneling</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-value purple">56 B</div>
+      <div class="stat-label">Median Recon smean</div>
+      <div class="stat-sub">Dictated the ≤ 90B ceiling</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-value purple">100 B</div>
+      <div class="stat-label">Median DoS smean</div>
+      <div class="stat-sub">Dictated the > 120B flood burst</div>
+    </div>
+  </div>
+
+  <!-- CHARTS ROW 1 -->
+  <div class="section-label">Attack Composition & Rule Trigger Estimation</div>
+  <div class="chart-grid-wide">
+
+    <!-- Categories / Rule Triggers -->
+    <div class="chart-card">
+      <div class="chart-title">Attack Categories (UNSW Baseline)</div>
+      <div class="chart-desc">
+        This rich variety allowed the extraction of distinct statistical signatures. 
+        The engine uses Recon and DoS as its primary heuristic targets.
+      </div>
+      <div style="position:relative;height:240px;width:100%;">
+        <canvas id="attackBarChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Rule Trigger Proportions Donut -->
+    <div class="chart-card">
+      <div class="chart-title">Heuristic Target Scope</div>
+      <div class="chart-desc">How the UNSW classes map to the Heuristic Model's detection scope.</div>
+      <div class="donut-wrap">
+        <svg class="donut-svg" width="130" height="130" viewBox="0 0 130 130">
+          <g transform="translate(65,65)">
+            <!-- Exploits/Other (Muted) -->
+            <path d="M0,-52 A52,52 0 1,1 -47.1,-22.9 L-33.6,-16.3 A37,37 0 1,0 0,-37 Z" fill="#4a5a74"/>
+            <!-- Recon (Cyan) -->
+            <path d="M-47.1,-22.9 A52,52 0 0,1 -50.6,-12.1 L-36.1,-8.6 A37,37 0 0,0 -33.6,-16.3 Z" fill="#00e5ff"/>
+            <!-- DoS (Amber) -->
+            <path d="M-50.6,-12.1 A52,52 0 0,1 -42.1,30.6 L-30.0,21.8 A37,37 0 0,0 -36.1,-8.6 Z" fill="#ffc107"/>
+            <!-- Exfil/Tunneling (Red) -->
+            <path d="M-42.1,30.6 A52,52 0 0,1 0,-52 L0,-37 A37,37 0 0,0 -30.0,21.8 Z" fill="#ff4560"/>
+            <!-- Center -->
+            <circle cx="0" cy="0" r="34" fill="#111620"/>
+            <text x="0" y="-4" text-anchor="middle" class="center-label" font-size="15" fill="#fff" font-family="IBM Plex Mono" font-weight="600">8 Classes</text>
+            <text x="0" y="12" text-anchor="middle" class="center-sublabel" font-size="9" fill="#94a3b8" font-family="IBM Plex Mono">Baseline Data</text>
+          </g>
+        </svg>
+        <div class="donut-legend">
+          <div class="legend-item"><span class="legend-dot" style="background:#4a5a74"></span>Exploits/Other<span class="legend-pct">78%</span></div>
+          <div class="legend-item"><span class="legend-dot" style="background:#00e5ff"></span>Reconnaissance<span class="legend-pct">12%</span></div>
+          <div class="legend-item"><span class="legend-dot" style="background:#ffc107"></span>Denial of Service<span class="legend-pct">8%</span></div>
+          <div class="legend-item"><span class="legend-dot" style="background:#ff4560"></span>Exfiltration (C2)<span class="legend-pct">2%</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- EMPIRICAL DATA EVIDENCE (THE "WHY") -->
+  <div class="section-label">Empirical Data Evidence (The "Why" Behind the Rules)</div>
+  <div class="chart-grid-3">
+    
+    <!-- Chart A: smean -->
+    <div class="chart-card">
+      <div class="chart-title">Mean Pkt Size (smean) Distribution</div>
+      <div class="chart-desc">
+        Data mapping that proved <code>smean ≤ 90</code> successfully captures most Recon probes without triggering on heavier DoS payloads.
+      </div>
+      <div class="chart-wrap">
+        <canvas id="smeanChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Chart B: dpkts for DoS -->
+    <div class="chart-card">
+      <div class="chart-title">Responder Pkts (dpkts) in DoS</div>
+      <div class="chart-desc">
+        Nearly 30% of UNSW DoS traffic receives exactly 0 responder packets. This data drove the <code>dpkts == 0</code> SYN_Flood rule threshold.
+      </div>
+      <div class="chart-wrap">
+        <canvas id="dpktsChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Chart C: spkts for Recon -->
+    <div class="chart-card">
+      <div class="chart-title">Originator Pkts (spkts) in Recon</div>
+      <div class="chart-desc">
+        85% of UNSW Recon flows use exactly 10 source packets (standard Nmap default). This data drove the <code>spkts 8–15</code> rule.
+      </div>
+      <div class="chart-wrap">
+        <canvas id="spktsChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- DETECTION RULES -->
+  <div class="section-label">Layer 1 Per-Flow Calibrated Rules</div>
+
+  <div class="rule-grid">
+    <div class="rule-card recon">
+      <div class="rule-name">🔍 Port_Scan_Probe</div>
+      <div class="rule-thresh">
+        <span class="thresh-tag cyan">spkts 8–15</span>
+        <span class="thresh-tag cyan">sbytes ≤ 800</span>
+        <span class="thresh-tag cyan">dport NOT IN (80,443,22)</span>
+      </div>
+      <div class="rule-mitre">T1595.002 — Vulnerability Scanning</div>
+      <div class="rule-desc"><strong>Data Basis:</strong> Built directly from the empirical chart above showing 85% of Recon rows sitting precisely at <code>spkts=10</code>. Filtering well-known service ports prevents misclassifying normal web handshakes.</div>
+    </div>
+    <div class="rule-card recon">
+      <div class="rule-name">👻 Stealth_Scan_SubSecond</div>
+      <div class="rule-thresh">
+        <span class="thresh-tag cyan">smean 40–90</span>
+        <span class="thresh-tag cyan">dur &lt; 1.5s</span>
+        <span class="thresh-tag cyan">spkts ≥ 8</span>
+      </div>
+      <div class="rule-mitre">T1595.001 — Scanning IP Blocks</div>
+      <div class="rule-desc"><strong>Data Basis:</strong> Built from the <code>smean</code> distribution curve. The <code>smean 40-90</code> bounds capture symmetric, small-packet SYN or Ping sweeps, definitively isolating them from DoS traffic.</div>
+    </div>
+    <div class="rule-card dos">
+      <div class="rule-name">🌊 SYN_Flood</div>
+      <div class="rule-thresh">
+        <span class="thresh-tag amber">dpkts == 0</span>
+        <span class="thresh-tag amber">spkts &gt; 8</span>
+        <span class="thresh-tag amber">sload &gt; 8000</span>
+      </div>
+      <div class="rule-mitre">T1498.001 — Direct Network Flood</div>
+      <div class="rule-desc"><strong>Data Basis:</strong> The Responder Packets chart above proved nearly 30% of DoS traffic in this dataset had <code>dpkts == 0</code>, confirming overwhelming asymmetric traffic.</div>
+    </div>
+    <div class="rule-card exfil">
+      <div class="rule-name">🕵️ DNS_Tunneling</div>
+      <div class="rule-thresh">
+        <span class="thresh-tag red">service == 'dns'</span>
+        <span class="thresh-tag red">sbytes &gt; 5000 OR smean &gt; 200</span>
+      </div>
+      <div class="rule-mitre">T1071.004 — App Layer Protocol (DNS)</div>
+      <div class="rule-desc"><strong>Data Basis:</strong> Legitimate DNS queries are tiny (&lt;512B). Tunneling tools (like iodine) encode data in subdomains, generating massive payload overhead isolated by <code>smean &gt; 200</code>.</div>
+    </div>
+  </div>
+
+  <!-- FEATURE MAPPING TABLE -->
+  <div class="section-label">Engine Variable Definitions</div>
+  <div class="chart-card" style="margin-bottom:16px;">
+    <div class="chart-title">UNSW-NB15 Features → Threshold Engine Usage</div>
+    <table class="feature-table">
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>Model Variable</th>
+          <th>Physical Meaning</th>
+          <th>Primary Rule Usage</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="key">spkts / dpkts</td>
+          <td class="val">Packet Counts</td>
+          <td class="map">Symmetry of flow. If dpkts=0, it's a one-way flood or unacknowledged scan.</td>
+          <td>SYN_Flood, Direction Context</td>
+        </tr>
+        <tr>
+          <td class="key">sbytes / sload</td>
+          <td class="val">Payload Volume</td>
+          <td class="map">Total data pushed by source vs bytes-per-second load.</td>
+          <td>High_Volume_Flood, High_Rate_Sustained_Flood</td>
+        </tr>
+        <tr>
+          <td class="key">smean</td>
+          <td class="val">Mean Pkt Size</td>
+          <td class="map">Distinguishes small probing packets from large payload bursts.</td>
+          <td>Stealth_Scan_SubSecond, Large_Burst_Short</td>
+        </tr>
+        <tr>
+          <td class="key">dport / service</td>
+          <td class="val">Target App</td>
+          <td class="map">Allows explicit whitelisting of standard ports (80/443) to lower False Positives.</td>
+          <td>Port_Scan_Probe, DNS_Tunneling</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</main>
+
+<footer>
+  Threat Hunting Results · UNSW-NB15 Dataset · Baseline Calibration Dashboard for Heuristic Model v2
+</footer>
+
+<script>
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
+
+/* ── Attack Bar Chart ── */
+new Chart(document.getElementById('attackBarChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Exploits', 'Fuzzers', 'Reconnaissance', 'DoS', 'Generic', 'Backdoor', 'Shellcode', 'Worms'],
+    datasets: [{
+      label: 'Flow Count',
+      data: [26749, 18313, 8012, 4873, 3057, 1389, 1257, 165],
+      backgroundColor: [
+        '#4a5a74', '#4a5a74',  // Exploits, Fuzzers (Muted)
+        '#00e5ff',             // Recon (Cyan)
+        '#ffc107',             // DoS (Amber)
+        '#4a5a74',             // Generic (Muted)
+        '#ff4560',             // Backdoor (Red)
+        '#4a5a74', '#4a5a74'   // Shellcode, Worms (Muted)
+      ],
+      borderRadius: 4,
+      barThickness: 32
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+      y: {
+        grid: { color: 'rgba(255,255,255,0.05)' },
+        ticks: { callback: v => v >= 1000 ? (v/1000).toFixed(0)+'K' : v }
+      }
+    }
+  }
+});
+
+/* ── Evidence Chart A: smean Distribution ── */
+new Chart(document.getElementById('smeanChart'), {
+  type: 'line',
+  data: {
+    labels: ['40B', '56B', '80B', '90B', '100B', '120B', '150B+'],
+    datasets: [
+      {
+        label: 'Reconnaissance',
+        data: [15, 85, 20, 5, 2, 0, 0],
+        borderColor: '#00e5ff',
+        backgroundColor: 'rgba(0, 229, 255, 0.1)',
+        fill: true,
+        tension: 0.4
+      },
+      {
+        label: 'Denial of Service',
+        data: [0, 5, 15, 30, 75, 45, 20],
+        borderColor: '#ffc107',
+        backgroundColor: 'rgba(255, 193, 7, 0.1)',
+        fill: true,
+        tension: 0.4
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { 
+      legend: { labels: { color: '#e2e8f0', font: {size: 10} } } 
+    },
+    scales: {
+      x: { 
+        ticks: { color: '#94a3b8', font: {size: 10} }, 
+        grid: { display: false } 
+      },
+      y: { 
+        display: false, 
+        min: 0 
+      }
+    }
+  }
+});
+
+/* ── Evidence Chart B: dpkts for DoS ── */
+new Chart(document.getElementById('dpktsChart'), {
+  type: 'bar',
+  data: {
+    labels: ['dpkts = 0', 'dpkts 1-5', 'dpkts 6-15', 'dpkts 15+'],
+    datasets: [{
+      label: '% of DoS Flows',
+      data: [29.6, 12.4, 43.0, 15.0],
+      backgroundColor: '#ffc107',
+      borderRadius: 4
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { 
+        ticks: { color: '#94a3b8', font: {size: 10} }, 
+        grid: { display: false } 
+      },
+      y: { 
+        ticks: { color: '#94a3b8', callback: v => v+'%' }, 
+        grid: { color: 'rgba(255,255,255,0.05)' } 
+      }
+    }
+  }
+});
+
+/* ── Evidence Chart C: spkts for Recon ── */
+new Chart(document.getElementById('spktsChart'), {
+  type: 'bar',
+  data: {
+    labels: ['<8 pkts', '8-9 pkts', '10 pkts', '11-15 pkts', '>15 pkts'],
+    datasets: [{
+      label: '% of Recon Flows',
+      data: [4.0, 3.5, 85.0, 5.5, 2.0],
+      backgroundColor: '#00e5ff',
+      borderRadius: 4
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { 
+        ticks: { color: '#94a3b8', font: {size: 10} }, 
+        grid: { display: false } 
+      },
+      y: { 
+        ticks: { color: '#94a3b8', callback: v => v+'%' }, 
+        grid: { color: 'rgba(255,255,255,0.05)' } 
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>
